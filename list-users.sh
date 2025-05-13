@@ -3,16 +3,15 @@
 ##########################################################
 # Script Name : list-users.sh
 # Author      : Tejesh
-# Version     : v1.1
+# Version     : v1.2
 # Date        : 13-May-2025
 #
-# Purpose     : This script connects to the GitHub API and
-#               lists all users with read access (pull permission)
-#               to a given GitHub repository.
+# Purpose     : Lists GitHub collaborators with read access
+#               using GitHub REST API and jq parser.
 #
 # Requirements:
-#   - jq must be installed (sudo apt install jq)
-#   - Export your GitHub username and PAT (token)
+#   - jq installed (sudo apt install jq)
+#   - Export GitHub credentials:
 #       export username="your_username"
 #       export token="your_token"
 #
@@ -23,7 +22,7 @@
 # GitHub API base URL
 API_URL="https://api.github.com"
 
-# GitHub credentials (must be set in the environment)
+# GitHub credentials (read from environment variables)
 USERNAME=$username
 TOKEN=$token
 
@@ -31,49 +30,49 @@ TOKEN=$token
 REPO_OWNER=$1
 REPO_NAME=$2
 
-# Helper function to print messages with color
-function log_info {
-    echo -e "\033[1;34m[INFO]\033[0m $1"
+# Helper function to validate input and prerequisites
+function helper {
+    expected_cmd_args=2
+    if [ $# -ne $expected_cmd_args ]; then
+        echo "Incorrect usage."
+        echo "Usage: ./list-users.sh <org_name> <repo_name>"
+        exit 1
+    fi
+
+    if [[ -z "$USERNAME" || -z "$TOKEN" ]]; then
+        echo "Please export 'username' and 'token' before running the script."
+        exit 1
+    fi
+
+    if ! command -v jq &>/dev/null; then
+        echo "'jq' is required but not installed. Run: sudo apt install jq"
+        exit 1
+    fi
 }
 
-function log_error {
-    echo -e "\033[1;31m[ERROR]\033[0m $1"
-}
+# Call helper at the start
+helper "$@"
 
-# Function to call GitHub API
+# Function to make a GET request to GitHub API
 function github_api_get {
     local endpoint="$1"
     local url="${API_URL}/${endpoint}"
-
-    # Make GET request with authentication
     curl -s -u "${USERNAME}:${TOKEN}" "$url"
 }
 
-# Function to list users with read (pull) access
+# Function to list users with read access
 function list_users_with_read_access {
     local endpoint="repos/${REPO_OWNER}/${REPO_NAME}/collaborators"
-
-    log_info "Fetching collaborators for ${REPO_OWNER}/${REPO_NAME}..."
     collaborators="$(github_api_get "$endpoint" | jq -r '.[] | select(.permissions.pull == true) | .login')"
 
     if [[ -z "$collaborators" ]]; then
-        log_info "No users with read access found for ${REPO_OWNER}/${REPO_NAME}."
+        echo "No users with read access found."
     else
-        log_info "Users with read access:"
+        echo "Users with read access to ${REPO_OWNER}/${REPO_NAME}:"
         echo "$collaborators"
     fi
 }
 
-# Check if all required inputs are provided
-if [[ -z "$USERNAME" || -z "$TOKEN" ]]; then
-    log_error "GitHub credentials not set. Please export 'username' and 'token'."
-    exit 1
-fi
-
-if [[ -z "$REPO_OWNER" || -z "$REPO_NAME" ]]; then
-    log_error "Usage: ./list-users.sh <org_name> <repo_name>"
-    exit 1
-fi
-
-# Execute main function
+# Main execution
+echo "Checking collaborators in ${REPO_OWNER}/${REPO_NAME}..."
 list_users_with_read_access
